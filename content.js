@@ -1,29 +1,35 @@
-const RENDER_URL = "https://r8raihan-aviator-predicted-v2.onrender.com/api.php";
+// আপনার Render URL
+const API_URL = "https://r8raihan-aviator-predicted-v2.onrender.com/api.php";
 
-function startScraping() {
-    // pkok.com এর মাল্টিপ্লায়ার এলিমেন্ট খোঁজা
-    const bubbles = document.querySelectorAll('.payouts-block .bubble-multiplier, .stats-list .multiplier, .v-chip');
-    
-    if (bubbles.length > 0) {
-        let currentVal = bubbles[0].innerText.replace('x', '').trim();
-        
-        if (!isNaN(currentVal) && currentVal !== "") {
-            chrome.storage.local.get(['lastSent'], function(res) {
-                if (res.lastSent !== currentVal) {
-                    console.log("Sending Data: " + currentVal);
-                    
-                    fetch(RENDER_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ multiplier: currentVal })
-                    });
-                    
-                    chrome.storage.local.set({ lastSent: currentVal });
+// গেমের নেটওয়ার্ক রিকোয়েস্ট ইন্টারসেপ্ট করা
+const constantMock = window.fetch;
+window.fetch = function() {
+    return constantMock.apply(this, arguments).then((response) => {
+        if (response.url.includes('payouts') || response.url.includes('history') || response.url.includes('asset-manifest')) {
+            const clone = response.clone();
+            clone.json().then(data => {
+                // Reqable থেকে পাওয়া ডেটা স্ট্রাকচার অনুযায়ী ভ্যালু বের করা
+                let lastMultiplier = data[0]?.multiplier || data.multiplier || data.last_payout;
+                if (lastMultiplier) {
+                    sendToServer(lastMultiplier);
                 }
-            });
+            }).catch(e => {});
         }
-    }
+        return response;
+    });
+};
+
+function sendToServer(val) {
+    fetch(API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ multiplier: val })
+    });
 }
 
-// প্রতি ১.৫ সেকেন্ডে একবার চেক করবে
-setInterval(startScraping, 1500);
+// ব্যাকআপ হিসেবে টেক্সট স্ক্যানারও চালু রাখলাম
+setInterval(() => {
+    let el = document.querySelector('.payouts-block .bubble-multiplier, .stats-list .multiplier');
+    if (el) sendToServer(el.innerText.replace('x',''));
+}, 2000);
