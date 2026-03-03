@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Aviator AI Scraper",
+  "version": "2.1",
+  "permissions": ["storage"],
+  "host_permissions": ["*://*.pkok.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["*://*.pkok.com/*"],
+      "js": ["content.js"],
+      "all_frames": true
+    }
+  ]
+}
