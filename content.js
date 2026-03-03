@@ -1,31 +1,32 @@
-const API_ENDPOINT = "https://r8raihan-aviator-predicted-v2.onrender.com/api.php";
+// আপনার Render URL
+const API_URL = "https://r8raihan-aviator-predicted-v2.onrender.com/api.php";
 
-function scrapePkok() {
-    // pkok.online এর নতুন মাল্টিপ্লায়ার এলিমেন্ট খোঁজা
-    // সাধারণত এটি 'payouts-block' অথবা 'bubble' ক্লাসে থাকে
-    let elements = document.querySelectorAll('.payouts-block .bubble-multiplier, .stats-list .multiplier, .history-item');
+function getAviatorData() {
+    // pkok.online এর জন্য স্পেসিফিক হিস্ট্রি ক্লাস্টার
+    let historyElements = document.querySelectorAll('.payouts-block .bubble-multiplier, .stats-list .multiplier, .v-chip__content');
     
-    if (elements.length > 0) {
-        let currentVal = elements[0].innerText.replace('x', '').trim();
+    if (historyElements.length > 0) {
+        let val = historyElements[0].innerText.replace('x', '').trim();
         
-        chrome.storage.local.get(['prevVal'], function(data) {
-            if (data.prevVal !== currentVal && !isNaN(currentVal) && currentVal !== "") {
-                console.log("New Aviator Data: " + currentVal);
+        chrome.storage.local.get(['lastValue'], function(result) {
+            if (result.lastValue !== val && !isNaN(val) && val !== "") {
+                console.log("New Aviator Result Found: " + val);
                 
-                fetch(API_ENDPOINT, {
+                fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        multiplier: currentVal,
-                        merchant: "pkokbdtf6" // আপনার Reqable আইডি
+                        multiplier: val,
+                        merchant: "pkokbdtf6", // Reqable থেকে পাওয়া আপনার আইডি
+                        bot_status: "active"
                     })
-                }).catch(e => console.log("Sync Error"));
-
-                chrome.storage.local.set({ prevVal: currentVal });
+                }).catch(err => console.error("Sync Error:", err));
+                
+                chrome.storage.local.set({ lastValue: val });
             }
         });
     }
 }
 
-// প্রতি ২.৫ সেকেন্ড পর পর চেক করবে যাতে সার্ভারে বেশি লোড না পড়ে
-setInterval(scrapePkok, 2500);
+// প্রতি ২ সেকেন্ডে একবার স্ক্যান করবে
+setInterval(getAviatorData, 2000);
